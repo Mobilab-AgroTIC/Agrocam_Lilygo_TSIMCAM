@@ -72,6 +72,7 @@ namespace rlc
     void Sleep::mcu_deep_sleep_module_off(int sleep_time_ms)
     {
         module_turn_off();
+        
 
         mcu_deep_sleep(sleep_time_ms);
 
@@ -80,9 +81,8 @@ namespace rlc
 
     String Sleep::wakeup_reason()
 {
-#ifdef maduino
-    return "Reason unknown on maduino";
-#endif
+
+    
 #ifdef tsimcam
     esp_sleep_wakeup_cause_t wakeup_reason;
 
@@ -126,43 +126,46 @@ namespace rlc
         if (adjusted_sleep > 0)
         {
             _hardware.end_console();
-#ifdef maduino
-            LowPower.sleep(adjusted_sleep);
-#endif
-#ifdef tsimcam
+
+            
             // TODO: investigate esp32 sleep options
             uint64_t sleep_time_us = uint64_t(adjusted_sleep) * 1000;
             esp_sleep_enable_timer_wakeup(sleep_time_us);
             esp_light_sleep_start();
-#endif
             _hardware.begin_console(100);
         }
         post_sleep();
     }
 
     void Sleep::mcu_deep_sleep(int sleep_time_ms)
+{
+    int adjusted_sleep = pre_sleep(sleep_time_ms);
+    if (adjusted_sleep > 0)
     {
-        int adjusted_sleep = pre_sleep(sleep_time_ms);
-        if (adjusted_sleep > 0)
-        {
-            _hardware.end_console();
-#ifdef maduino
-            LowPower.deepSleep(adjusted_sleep);
-#endif
-#ifdef tsimcam
-            // TODO: investigate esp32 deep sleep options
-            uint64_t sleep_time_us = uint64_t(adjusted_sleep) * 1000;
-            esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_OFF);
-            esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_SLOW_MEM, ESP_PD_OPTION_OFF);
-            esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_FAST_MEM, ESP_PD_OPTION_OFF);
-            esp_sleep_pd_config(ESP_PD_DOMAIN_XTAL, ESP_PD_OPTION_OFF);
-            esp_sleep_enable_timer_wakeup(sleep_time_us);
-            esp_deep_sleep_start();
-#endif
-            _hardware.begin_console(100);
-        }
-        post_sleep();
+        _console.println(" Fin de setup, préparation du deep sleep...");
+
+        _hardware.end_console();
+
+
+        // Réveil via minuterie RTC
+        uint64_t sleep_time_us = (uint64_t)adjusted_sleep * 1000ULL;
+        esp_sleep_enable_timer_wakeup(sleep_time_us);
+
+        // (Optionnel) Réveil via bouton externe RTC_GPIO (ex : GPIO 0)
+        // pinMode(0, INPUT_PULLUP);  // Attention, GPIO doit être RTC capable !
+        // esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0); // niveau bas réveille
+
+        // Power down toutes les zones inutiles
+        esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_OFF);
+        esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_SLOW_MEM, ESP_PD_OPTION_OFF);
+        esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_FAST_MEM, ESP_PD_OPTION_OFF);
+        esp_sleep_pd_config(ESP_PD_DOMAIN_XTAL, ESP_PD_OPTION_OFF);
+
+        _console.println("Ready. DEEP SLEEP NOW.");
+        esp_deep_sleep_start(); //  Ne jamais rien mettre après
     }
+}
+
 
     void Sleep::module_minimum_functionality()
     {
@@ -181,6 +184,8 @@ namespace rlc
 
     void Sleep::module_turn_off()
     {
+        pinMode(1, OUTPUT);      // GPIO1 doit être configuré en sortie
+        digitalWrite(1, LOW);
         _ms_before_sleep = millis();
         _hardware.turn_off_module();
         _ms_before_sleep = millis() - _ms_before_sleep;

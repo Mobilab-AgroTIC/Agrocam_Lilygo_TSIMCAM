@@ -3,6 +3,8 @@
 
 #include <Arduino.h>
 #include "FileHelper.h"
+#include "esp_camera.h"
+
 
 #ifdef tsimcam
 
@@ -26,7 +28,6 @@
 #define CAM_HREF_PIN 7
 #define CAM_PCLK_PIN 13
 
-#include "esp_camera.h"
 
 #endif
 

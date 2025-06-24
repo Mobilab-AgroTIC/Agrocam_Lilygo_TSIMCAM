@@ -2,11 +2,7 @@
 
 namespace rlc
 {
-#ifdef maduino
-    Console::Console(Serial_ &console) : _console(console)
-    {
-    }
-#endif
+
 #ifdef tsimcam
     Console::Console(HWCDC &console) : _console(console)
     {

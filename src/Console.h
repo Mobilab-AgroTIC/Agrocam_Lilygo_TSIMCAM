@@ -9,9 +9,7 @@ namespace rlc
     class Console
     {
     public:
-#ifdef maduino
-        Console(Serial_ &console);
-#endif
+
 #ifdef tsimcam
         Console(HWCDC &console);
 #endif

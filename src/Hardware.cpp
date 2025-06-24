@@ -1,4 +1,5 @@
 #include "Hardware.h"
+#include "Camera.h"
 
 namespace rlc
 {
@@ -18,16 +19,7 @@ namespace rlc
         begin_serial_module();
 
         pinMode(LTE_PWRKEY_PIN, OUTPUT);
-#ifdef maduino
-        pinMode(LTE_RESET_PIN, OUTPUT);
-        pinMode(LTE_FLIGHT_PIN, OUTPUT);
 
-        digitalWrite(LTE_RESET_PIN, LOW);
-        delay(100);
-
-        digitalWrite(LTE_FLIGHT_PIN, LOW); // LOW = Normal Mode, HIGH = Flight Mode
-        delay(1000);
-#endif
     }
 
     bool Hardware::init_sd()
@@ -43,55 +35,52 @@ namespace rlc
     }
 
     bool Hardware::init_module()
+{
+    if (is_module_on())
     {
-        if (is_module_on())
+        _command_helper.send_command_and_wait("AT+CMEE=2");
+
+
+        if (manufacturer == "")
         {
-            _command_helper.send_command_and_wait("AT+CMEE=2");
-            if (manufacturer == "")
-            {
-                if (!_command_helper.send_command_and_wait("AT+CGMI")) // request manufacturer indentification
-                {
-                    return false;
-                }
-                manufacturer = _command_helper.last_command_response;
-            }
-
-            if (model == "")
-            {
-                if (!_command_helper.send_command_and_wait("AT+CGMM")) // request model identification
-                {
-                    return false;
-                }
-                model = _command_helper.last_command_response;
-            }
-
-            if (imei == "")
-            {
-                if (!_command_helper.send_command_and_wait("AT+CGSN")) // request product serial number identification
-                {
-                    return false;
-                }
-                imei = _command_helper.last_command_response;
-            }
-            //_command_helper.send_command_and_wait("AT+CSUB");   // request the module version and chip
-            //_command_helper.send_command_and_wait("AT+CPIN?");  // request the state of the SIM card
-            //_command_helper.send_command_and_wait("AT+CICCID"); // read ICCID from SIM card
-            //_command_helper.send_command_and_wait("AT+CNUM");   // request the subscriber number
-            //_command_helper.send_command_and_wait("AT+COPS");   // check the current network operator
-            //_command_helper.send_command_and_wait("AT+IPREX?"); // check local baud rate
-
-            _command_helper.send_command_and_wait("AT+CGREG=1");
-            //_command_helper.send_command_and_wait("AT+CREG?");
-            _command_helper.send_command_and_wait("AT+CGATT=1");
-            _command_helper.send_command_and_wait("AT+CGACT=1,1");
-            // send_command_and_wait("AT+CMFG=1"); // Sets SMS message format to TEXT mode
-            _command_helper.send_command_and_wait("AT+CGDCONT=1,\"IP\",\"super\"");
-
-            return true;
+            if (!_command_helper.send_command_and_wait("AT+CGMI"))
+                return false;
+            manufacturer = _command_helper.last_command_response;
         }
 
-        return false;
+        if (model == "")
+        {
+            if (!_command_helper.send_command_and_wait("AT+CGMM"))
+                return false;
+            model = _command_helper.last_command_response;
+        }
+
+        if (imei == "")
+        {
+            if (!_command_helper.send_command_and_wait("AT+CGSN"))
+                return false;
+            imei = _command_helper.last_command_response;
+        }
+
+        // Configuration réseau pour carte Bouygues
+        _command_helper.send_command_and_wait("AT+CGREG=1");
+        _command_helper.send_command_and_wait("AT+CGDCONT=1,\"IP\",\"ebouygtel.com\"");// APn ICI======
+        _command_helper.send_command_and_wait("AT+CGATT=1");
+        _command_helper.send_command_and_wait("AT+CGACT=1,1");
+
+        // Debug réseau
+        _command_helper.start_verbose();  // Active affichage console AT
+        _command_helper.send_command_and_wait("AT+CREG?");
+        _command_helper.send_command_and_wait("AT+CGATT?");
+        _command_helper.send_command_and_wait("AT+CSQ");
+        _command_helper.end_verbose();
+
+        return true;
     }
+
+    return false;
+}
+
 
     void Hardware::begin_console(unsigned long timeout)
     {
@@ -132,40 +121,59 @@ namespace rlc
     }
 
     bool Hardware::is_cellular_connected(bool is_config_if_not)
+{
+    if (_command_helper.send_command_and_wait("AT+CGREG?"))
     {
-        if (_command_helper.send_command_and_wait("AT+CGREG?"))
+        // Accepte aussi bien le mode normal que roaming
+        if (_command_helper.last_command_response.indexOf("0,1") > 0 ||
+            _command_helper.last_command_response.indexOf("1,1") > 0 ||
+            _command_helper.last_command_response.indexOf("0,5") > 0 ||
+            _command_helper.last_command_response.indexOf("1,5") > 0)
         {
-            if (_command_helper.last_command_response.indexOf("1,5") > 0)
-            {
-                return true;
-            }
+            return true;
         }
-
-        if (is_config_if_not)
-        {
-            if (!is_module_on())
-            {
-                turn_on_module();
-            }
-            init_module();
-
-            return is_cellular_connected(false);
-        }
-
-        return false;
     }
+
+    if (is_config_if_not)
+    {
+        if (!is_module_on())
+        {
+            turn_on_module();
+        }
+        init_module();
+
+        return is_cellular_connected(false);
+    }
+
+    return false;
+}
 
     bool Hardware::turn_off_module()
     {
         if (is_module_on()) // if it's on, turn it off.
         {
-            digitalWrite(LTE_PWRKEY_PIN, LOW);
-            delay(500);
-            _command_helper.send_command_and_wait("AT+CPOF");
-            // TODO: what is the minimum that still works here?
-            // delay(500);
-            return true;
-        }
+    // Étape 1 : Éteindre proprement le modem SIM7600
+    if (is_module_on()) {
+        // Envoi AT+CPOF pour demander arrêt logiciel
+        _command_helper.send_command_and_wait("AT+CPOF");// Envoi de la commande pour éteindre le module
+        delay(200); // petit délai après commande
+    }
+
+    // Étape 2 : Pulse GPIO PWRKEY pour forcer l'arrêt matériel
+    pinMode(LTE_PWRKEY_PIN, OUTPUT);
+    digitalWrite(LTE_PWRKEY_PIN, LOW);
+    delay(1500); // pulse de 1.5 secondes
+    digitalWrite(LTE_PWRKEY_PIN, HIGH);
+    delay(200); // stabilisation
+
+    
+/*
+    // Étape 3 : couper liaison UART si possible
+    end_serial_module();  // équivalent à SerialAT.end()*/
+
+ 
+
+    return true;}
 
         return true;
     }
@@ -174,12 +182,9 @@ namespace rlc
     {
         if (!is_module_on()) // if it's off, turn it on.
         {
-#ifdef maduino
-            digitalWrite(LTE_PWRKEY_PIN, LOW);
-            delay(500);
-            digitalWrite(LTE_PWRKEY_PIN, HIGH);
-#endif
+
 #ifdef tsimcam
+
             digitalWrite(LTE_PWRKEY_PIN, 1);
             delay(500);
             digitalWrite(LTE_PWRKEY_PIN, 0);

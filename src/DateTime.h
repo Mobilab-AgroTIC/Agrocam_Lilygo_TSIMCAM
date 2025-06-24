@@ -32,8 +32,6 @@ namespace rlc
         String to_date_time_string();
         String to_timestamp_string();
         String month_string();
-        String to_yyyymmddhhmmss();
-
 
     private:
         bool validate();
