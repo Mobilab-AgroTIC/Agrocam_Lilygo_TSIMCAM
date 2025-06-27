@@ -21,6 +21,10 @@
 
 #define CAM_PWDN_PIN -1
 
+
+#define alim_jst 1
+#define moteur_pin 21 // Pin du moteur servo
+
 #endif
 
 #include <Arduino.h>

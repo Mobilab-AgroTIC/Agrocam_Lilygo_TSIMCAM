@@ -184,8 +184,7 @@ namespace rlc
 
     void Sleep::module_turn_off()
     {
-        pinMode(1, OUTPUT);      // GPIO1 doit être configuré en sortie
-        digitalWrite(1, LOW);
+
         _ms_before_sleep = millis();
         _hardware.turn_off_module();
         _ms_before_sleep = millis() - _ms_before_sleep;
